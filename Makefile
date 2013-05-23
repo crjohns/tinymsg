@@ -1,9 +1,13 @@
 default: all
 
+CFLAGS ?= -g
+
 LIBS = tinymsg.a
 tinymsg.a-OBJS = tinymsg.o
 
 PROGRAMS = inittest
+
+HEADERS = $(wildcard *.h)
 
 $(LIBS): $(value $(join $(LIBS), -OBJS))
 	$(AR) rcs $@ $^
