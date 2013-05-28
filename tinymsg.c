@@ -55,15 +55,17 @@ static void *open_shared_mapping(const char *name)
     int fd = shm_open(name, O_RDWR);
     if(fd < 0)
     {
-        perror("shm open");
-        abort();
+        fprintf(stderr, "mapping for %s\n", name);
+        perror("shm open mapping");
+        exit(1);
     }
 
     void *ret = mmap(0, MAPPING_LEN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if(ret == MAP_FAILED)
     {
-        perror("mmap");
-        abort();
+        fprintf(stderr, "mapping for %s\n", name);
+        perror("mmap open");
+        exit(1);
     }
 
     return ret;
@@ -71,19 +73,22 @@ static void *open_shared_mapping(const char *name)
 
 static void *create_shared_mapping(const char *name)
 {
-    int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL);
+    // XXX: should be O_EXCL, but that causes problems when we crash and restart
+    int fd = shm_open(name, O_RDWR | O_CREAT);
     if(fd < 0)
     {
-        perror("shm open");
-        abort();
+        fprintf(stderr, "mapping for %s\n", name);
+        perror("shm create mapping");
+        exit(1);
     }
 
     ftruncate(fd, MAPPING_LEN);
     void *ret = mmap(0, MAPPING_LEN, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if(ret == MAP_FAILED)
     {
-        perror("mmap");
-        abort();
+        fprintf(stderr, "mapping for %s\n", name);
+        perror("mmap create");
+        exit(1);
     }
 
     return ret;
@@ -129,6 +134,16 @@ static int read_message(tm_mailbox *mb, tm_message *buffer)
 
     return 1;
 }
+
+static void write_message(tm_mailbox *mb, tm_message *msg)
+{
+    while(!__sync_bool_compare_and_swap(&mb->slots[mb->tail].message.message, 0, msg->message))
+        /* keep trying */;
+
+    // XXX: should wrap around
+    __sync_fetch_and_add(&mb->tail, 1);
+}
+
 
 int tm_init(unsigned long name)
 {
@@ -223,7 +238,11 @@ tm_data *tm_alloc(void)
 {
     if(dataBox->curslot < dataBox->limit)
     {
-        return &dataBox->slots[dataBox->curslot++];
+        int slot = dataBox->curslot++;
+        tm_data *ret = &dataBox->slots[slot];
+        ret->owner = my_name_entry->name;
+        ret->slot = slot;
+        return ret;
     }
     else
     {
@@ -243,11 +262,36 @@ tm_data *tm_alloc(void)
         if(message.dataname != my_name_entry->name)
         {
             fprintf(stderr, "FATAL: Found free for wrong name\n");
-            abort();
+            exit(1);
+            
         }
         else
         {
             return &dataBox->slots[message.slot];
         }
     }
+}
+
+void tm_free(tm_data *data)
+{
+    tm_message msg;
+    tm_mailbox *fb = get_freebox(data->owner);
+    msg.dataname = data->owner;
+    msg.slot = data->slot;
+    write_message(fb, &msg);
+}
+
+tm_data *tm_poll(void)
+{
+    tm_message msg;
+
+    int r = read_message(mailbox, &msg);
+
+    if(r == 0)
+    {
+        return NULL;
+    }
+
+    tm_data *buffer = get_data_buffer(msg.dataname);
+    return &buffer[msg.slot];
 }

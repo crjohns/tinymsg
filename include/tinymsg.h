@@ -69,8 +69,10 @@ typedef struct
 
 typedef struct
 {
+    uint32_t owner;
+    uint16_t slot;
     uint16_t len;
-    char data[MESSAGE_DATA_SIZE - sizeof(uint16_t)];
+    char data[MESSAGE_DATA_SIZE - sizeof(uint16_t) - sizeof(uint16_t) - sizeof(uint32_t)];
 } tm_data;
 
 #define MAX_DATA_LEN (MESSAGE_DATA_SIZE - sizeof(uint16_t))
@@ -87,6 +89,10 @@ void tm_cleanup(void);
 int tm_init(unsigned long name);
 
 tm_data *tm_alloc(void);
+void tm_free(tm_data *);
+
+
+tm_data *tm_poll(void);
 
 
 #endif
