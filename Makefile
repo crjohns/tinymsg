@@ -27,4 +27,4 @@ test: $(TESTS)
 	@for program in $(TESTS); do echo "--- Running $$program ---"; sudo $$program; if [ $$? != 0 ]; then echo "--- FAILED ---"; else echo "--- SUCCESS ---"; fi; done
 
 clean:
-	rm -f *.o $(LIBS) $(PROGRAMS)
+	rm -f *.o $(LIBS) $(PROGRAMS) $(TESTS) $(wildcard tests/*.o)
